@@ -1,0 +1,13 @@
+MOV A,12D
+MOV B,CH
+ADD A,B
+MOV B,A
+SUB B,22D
+MOV A,B
+
+
+
+
+a = 12 + 12
+b = a - 22
+print b

@@ -1,0 +1,2 @@
+special1 special2      saad 123     3434
+word not_special    123456     12345

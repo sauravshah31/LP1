@@ -1,0 +1,24 @@
+{
+    int var_int;
+    real var_real;
+    bool var_bool'
+
+    var_int = 3*5-(4/2)+1;
+    var_real = 3.0 + var_int;
+
+    var_bool = var_real <= var_int;
+    if(var_bool){
+        var_real = 100;
+        bool b = false;
+        int i = ~2;
+        while(var_real >= var_int){
+            var_real -= 1;
+            b = b || true;
+        }
+    }else{
+        while(var_real <= var_int){
+            var_real += 1;
+        }
+    }
+
+}

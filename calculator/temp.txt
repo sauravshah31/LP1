@@ -1,0 +1,29 @@
+expr        :   IF OBRC condition CBRC THEN stmt ELSE stmt
+                    {printf("if\n");}
+                |
+                stmt;
+condition   :   condition EQ NUM 
+                    {printf("leq\n");}
+                |
+                condition NEQ NUM
+                    {printf("neq\n");}
+                |
+                condition GEQ NUM
+                    {printf("geq\n");}
+                |
+                condition LEQ NUM
+                    {printf("leq\n");}
+                |
+                condition LT NUM
+                    {printf("lt\n");}
+                |
+                condition GT NUM
+                    {printf("gt\n");}
+                |
+                NUM
+                    {printf("num\n");}
+                ;
+
+stmt        :   NUM 
+                    {printf("stmt\n");}
+                ;

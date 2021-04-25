@@ -1,0 +1,1217 @@
+
+
+
+
+#pragma once
+
+int nextInstr=0;
+int tempGenerated=0;
+
+struct Quadruple{
+	char *result;
+	char *addr1;  
+	char *op;     
+	char *addr2;  
+	char *addr3; 
+	int  label;  
+};
+Quadruple quadruple[100];
+char* newTemp();
+void printCode();
+void genCode(const char*result,const char *addr1,const char *op,const char *addr2,const char *addr3,int label);
+void genCode(const char *result,const char*addr1,const char *op,const char *addr2);
+void genCode(const char *result,const char *unop,const char*addr1);
+void genCode(const char *result,const char *addr1);
+void genCode(const char *result,int label);
+
+
+
+
+//===============================================================================
+
+#include "codegen.h"
+#include "backpatch.cpp"
+#include "stable.cpp"
+extern Quadruple quadruple[5000];
+
+
+
+char* newTemp(){
+	char *temp= new char[10];
+	snprintf(temp,10,"__t%d__",tempGenerated);
+	tempGenerated++;
+	return temp;
+}
+
+
+
+
+void printCode(){
+    FILE * file = fopen("output.txt","w");
+	for(int i=0;i<nextInstr-1;i++){
+	     printf("\n");
+	     fprintf(file,"\n");
+        if(!strcmp(quadruple[i].result,"if")){
+            printf("%.4d : %s\t%s\t%s\t%s\t%s\t%.4d",i,quadruple[i].result,quadruple[i].addr1,quadruple[i].op,quadruple[i].addr2,quadruple[i].addr3,quadruple[i].label);
+            fprintf(file,"%.4d : %s\t%s\t%s\t%s\t%s\t%.4d",i,quadruple[i].result,quadruple[i].addr1,quadruple[i].op,quadruple[i].addr2,quadruple[i].addr3,quadruple[i].label);
+            continue;
+        }
+        if(!strcmp("goto",quadruple[i].result)){
+             printf("%.4d : %s\t%.4d",i,quadruple[i].result,quadruple[i].label);
+             fprintf(file,"%.4d : %s\t%.4d",i,quadruple[i].result,quadruple[i].label);
+        }
+	    else{
+            printf("%.4d : %s\t=\t%s",i,quadruple[i].result,quadruple[i].addr1);
+            fprintf(file,"%.4d : %s\t=\t%s",i,quadruple[i].result,quadruple[i].addr1);
+            if(quadruple[i].op!=NULL){
+                printf("\t%s",quadruple[i].op);
+                fprintf(file,"\t%s",quadruple[i].op);
+            }
+            else continue;
+            if(quadruple[i].addr2!=NULL){
+                printf("\t%s",quadruple[i].addr2);
+                fprintf(file,"\t%s",quadruple[i].addr2);
+            }
+            else continue;
+            if(quadruple[i].addr3!=NULL){
+                printf("\t%s",quadruple[i].addr3);
+                fprintf(file,"\t%s",quadruple[i].addr3);
+            }
+            else continue;
+            if(quadruple[i].label!=0){
+                printf("\t%d",quadruple[i].label);
+                fprintf(file,"\t%d",quadruple[i].label);
+            }
+	    }
+	}
+	 printf("\n%.4d : %s\n",nextInstr-1,quadruple[nextInstr-1].result);
+	 fprintf(file,"\n%.4d : %s\n",nextInstr-1,quadruple[nextInstr-1].result);
+	 fclose(file);
+	 printf("\nNote: Output is also available in file with name 'output.txt'\n\n");
+}
+
+
+
+
+void genCode(const char *result,const char*addr1,const char *op,const char *addr2){
+        quadruple[nextInstr].result=(char*)result;
+		quadruple[nextInstr].addr1=(char*)addr1;
+        quadruple[nextInstr].op=(char*)op;
+		quadruple[nextInstr].addr2=(char*)addr2;
+		quadruple[nextInstr].addr3=NULL;
+		quadruple[nextInstr].label=0;
+		nextInstr++;
+}
+
+
+
+void genCode(const char *result,const char *unop,const char*addr1){
+        quadruple[nextInstr].result=(char*)result;
+		quadruple[nextInstr].addr1=NULL;
+        quadruple[nextInstr].op=(char*)unop;
+		quadruple[nextInstr].addr2=(char*)addr1;
+		quadruple[nextInstr].addr3=NULL;
+		quadruple[nextInstr].label=0;
+		nextInstr++;
+}
+
+
+
+void genCode(const char*result,const char *addr1,const char *op,const char *addr2,const char *addr3,int label){
+
+		quadruple[nextInstr].result=(char*)result;
+		quadruple[nextInstr].addr1=(char*)addr1;
+		quadruple[nextInstr].op=(char*)op;
+		quadruple[nextInstr].addr2=(char*)addr2;
+		quadruple[nextInstr].addr3=(char*)addr3;
+		quadruple[nextInstr].label=label;
+		nextInstr++;
+}
+
+
+void genCode(const char *result,const char *addr1){
+		quadruple[nextInstr].result = (char*)result;
+		quadruple[nextInstr].addr1 = (char*)addr1;
+		quadruple[nextInstr].addr2 = NULL;
+		quadruple[nextInstr].addr3 = NULL;
+		quadruple[nextInstr].label =0;
+		nextInstr++;
+}
+
+
+void genCode(const char *result,int label){
+		quadruple[nextInstr].result = (char*)result;
+		quadruple[nextInstr].addr1 = NULL;
+		quadruple[nextInstr].addr2 = NULL;
+		quadruple[nextInstr].addr3 = NULL;
+		quadruple[nextInstr].label = label;
+		nextInstr++;
+}
+
+
+
+
+//===============================================================================
+#include "rule.h"
+
+typedef YYSTYPE::BackpatchList patchList;
+typedef YYSTYPE::switchL switchLR;
+
+
+patchList *makeList(int i){
+ patchList *temp =  new patchList();
+ temp->ins  = i;
+ temp->next = NULL;
+ return temp;
+}
+
+
+patchList *mergeList(patchList *l1,patchList *l2){
+    if(l1==NULL)return l2;
+    if(l2==NULL)return l1;
+    patchList *t = l1;
+    while(t->next!=NULL)t=t->next;
+    t->next=l2;
+    return l1;
+}
+
+
+void backpatch(patchList *p,int i){
+    patchList *t = p;
+    patchList *t2;
+    while(t!=NULL){
+        quadruple[t->ins].label = i;
+        t2=t;
+        t=t->next;
+        delete t2;
+    }
+}
+
+
+switchLR*  makeList(int label,bool type,char* val,int lineno){
+    switchLR *temp = new switchLR;
+    temp->instr  = label;
+    temp->stype   = type;
+    temp->val    = val;
+    temp->lineno = lineno;
+    temp->next   = NULL;
+    return temp;
+}
+
+
+switchLR* mergeSwitchList(switchLR *l1,switchLR *l2){
+    if(l1==NULL)return l2;
+    if(l2==NULL)return l1;
+    switchLR *t = l1;
+    while(t->next!=NULL)t = t->next;
+    t->next = l2;
+    return l1;
+}
+
+
+//================================================================================
+
+
+
+
+
+
+
+
+%{
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <unistd.h>
+
+    extern int yylex();
+    int yyerror(char *msg);
+    extern int yylineno;
+%}
+
+%union{
+    char *c;
+    int i;
+}
+
+
+
+%token <i> K_INTEGER K_UINTEGER K_BOOLEAN K_REAL K_IF K_ELSE K_SWITCH K_CASE K_DEFAULT K_WHILE K_FOR K_CONTINUE K_BREAK
+%token <i> O_ASSIGN O_ASSIGN_PLUS O_ASSIGN_MINUS O_ASSIGN_MUL O_ASSIGN_DIVIDE O_PLUS O_MINUS O_MUL O_DIVIDE O_EXP O_BOR O_BAND O_BNOT O_BXOR O_REQ O_RNEQ O_RLT O_RLEQ O_RGTH O_RGEQ O_UMINUS O_AND O_OR O_NOT O_REL
+%token <c> N_ID
+%token <c> V_TRUE V_FLASE V_INTEGER V_REAL
+
+%%
+P           :   %empty
+            |   block
+            ;
+block       : '{' marker_block code '}'
+marker_block    :  %empty
+            ;
+code        :   %empty
+            |   declaration code
+            |   assignment code
+            |   conditional code
+            |   repetitive code
+            ;
+declaration :   declaration_int
+            |   declaration_real
+            |   declaration_bool
+            ;
+declaration_int :   K_INTEGER N_ID ';'
+                ;
+declaration_real:   K_REAL N_ID ';'
+                ;
+declaration_bool:   K_BOOLEAN N_ID ';'
+                ;
+assignment  :   inititalization
+            |   value_change
+            ;
+inititalization :   inititalization_int
+                |   inititalization_real
+                |   inititalization_bool
+                ;
+inititalization_int     :   K_INTEGER N_ID '=' expr ';'
+                        |   K_UINTEGER N_ID '=' expr ';'  
+                        ;
+inititalization_real    :   K_REAL N_ID '=' expr ';'
+                        ;
+inititalization_bool    :   K_BOOLEAN N_ID '=' expr ';'
+                        ;
+value_change    :   N_ID O_ASSIGN expr ';'
+                |   N_ID O_ASSIGN_PLUS expr ';'
+                |   N_ID O_ASSIGN_MINUS expr ';'
+                |   N_ID O_ASSIGN_MUL expr ';'   
+                |   N_ID O_ASSIGN_DIVIDE expr ';'
+                ;
+
+conditional :   conditional_if
+            |   conditional_switch
+            ;
+conditional_if  :   conditional_if_compound
+                |   conditional_if_simple
+                ;
+conditional_if_simple   :   K_IF '(' expr ')' block
+                        ;
+conditional_if_compound   :  conditional_if_simple K_ELSE '(' expr ')' block
+                        ;
+
+conditional_switch  : K_SWITCH '(' expr ')' block_switch
+                    ;
+block_switch        :  K_CASE expr ':' block block_switch
+                    |  K_CASE expr ':' block
+                    |  K_DEFAULT ':' block
+                    ;
+repetitive  :   repetitive_for
+            |   repetitive_while
+            ;
+repetitive_for  :   K_FOR
+                ;
+repetitive_while:   K_WHILE '(' expr ')' block 
+                ;
+
+
+expr    :   expr_boolean
+        |   expr_arithmetic
+        ;
+
+expr_boolean    :   expr_boolean_or
+                |   expr_boolean_or O_REL expr_boolean_or
+                ;
+expr_boolean_or :   expr_boolean_and
+                |   expr_boolean_or O_OR expr_boolean_and
+                ;
+expr_boolean_and:   expr_boolean_bor
+                |   expr_boolean_and O_AND expr_boolean_bor
+                ;
+expr_boolean_bor:   expr_boolean_band
+                |   expr_boolean_bor O_BOR  expr_boolean_band
+                ;
+expr_boolean_band:  expr_boolean_bxor
+                 |  expr_boolean_band O_BAND expr_boolean_bxor   
+                 ;
+expr_boolean_bxor   :  expr_boolean_not
+                    |  expr_boolean_bxor O_BXOR expr_boolean_not 
+expr_boolean_not :  expr_boolean_bnot
+                 |  O_NOT expr_boolean_not
+                 ;
+expr_boolean_bnot:  '(' expr_boolean ')'
+                 |  value
+                 |  O_BNOT expr_boolean_bnot
+                 ;
+
+expr_arithmetic :   expr_arithmetic_plus
+                ;
+expr_arithmetic_plus    :   expr_arithmetic_minus
+                        |   expr_arithmetic_plus O_PLUS expr_arithmetic_minus
+                        ;
+expr_arithmetic_minus   :   expr_arithmetic_mul
+                        |   expr_arithmetic_minus O_MINUS expr_arithmetic_mul
+                        ;
+
+expr_arithmetic_mul     :   expr_arithmetic_div
+                        |   expr_arithmetic_mul O_MUL expr_arithmetic_div
+                        ;   
+expr_arithmetic_div     :   expr_arithmetic_pow
+                        |   expr_arithmetic_div O_DIVIDE expr_arithmetic_pow
+                        ; 
+expr_arithmetic_pow     :   expr_arithmetic_uminus
+                        |   expr_arithmetic_pow O_EXP expr_arithmetic_uminus
+                        ; 
+expr_arithmetic_uminus  :   %empty
+;
+
+value           :   value_term
+                |   O_UMINUS value
+                ;
+value_term      :   V_TRUE
+                |   V_FLASE
+                |   V_REAL
+                |   V_INTEGER
+                ;
+%%
+
+int yyerror(char *msg){
+    fprintf(stderr,"%s\n",msg);
+    return -1;
+}
+int main(void){
+    FILE *f = fopen("./input.l","r");
+    size_t len = 0;
+    char *line=NULL;
+    while (getline(&line, &len, f) > 0) {
+        printf("%s",line);
+    }
+    fclose(f);
+}
+
+
+
+//=============================================================================
+%{
+  #include "codegen.cpp"
+
+  
+  #define EMPTY -1
+  using namespace std;
+  extern FILE* yyin;
+  extern int lineno;
+  extern int colum;
+  extern char *stream;
+  int yylex(void);
+  void yyerror(const char *);
+  extern int nextInstr;
+  int type;
+  vector<YYSTYPE::BackpatchList*> breaklist;
+  vector<YYSTYPE::BackpatchList*> continuelist;
+  int break_current    = -1;
+  int continue_current = -1;
+  extern bool assign ;
+%}
+%token IF
+%token ELSE
+%token WHILE
+%token SWITCH
+%token CASE DEFAULT
+%token INT FLOAT BOOL UNSIGNED SIGNED
+%token ASSIGN PLUSEQ MINUSEQ TIMESEQ DIVIDEQ
+%token PLUS MINUS TIMES DIVIDE EXP
+%token IOR IAND INOT XOR
+%token OR AND NOT
+%token EQ NEQ LT LEQ GT GEQ
+%token LP RP
+%token LB RB
+%token COMMA
+%token SEMICOLON COLON
+%token DOUBLENUM INTNUM TRUE FALSE ID
+%token PLUSPLUS
+%token MINUSMINUS
+%token CONTINUE BREAK
+
+%union{
+  int type;
+  struct marks{
+    int instr;
+  }mark;
+  struct BackpatchList{
+    int ins;
+    BackpatchList *next;
+  };
+  struct info{
+    char *addr;
+    short  type;
+    BackpatchList *tlist;
+    BackpatchList *flist;
+  }exp;
+  struct nextL{
+      int instr; /**Instruction number */
+      BackpatchList *nextList; /**Linked list of Backpatch*/
+  }List;
+  
+
+  struct switchL{
+    int instr;     /**Instruction number*/
+    int lineno;    /**Line number where this list was found*/
+    switchL *next; /**Next pointer of switch list*/
+    bool stype;    /**default or case statement*/
+    char *val;     /**Case value*/
+  };
+  switchL *switchList;
+  char *str;
+}
+
+%type<str> RELOP
+%type<type> var-type declaration init-declarator-list
+%type<exp>  assignment-expression unary-expression postfix-expression primary-expression ID
+logical-OR-expression logical-AND-expression inclusive-OR-expression  inclusive-AND-expression
+equality-expression relational-expression Literals exponentiation-expression multiplicative-expression
+additive-expression exclusive-OR-expression if_prefix
+
+%type<mark> marker continue-marker
+%type<List> statement Next selection-statement compound-statement iteration-statement jump-statement statement-list
+%type<switchList> switch-statement case-list default-statement
+
+%start Program
+%%
+Program:
+translation-unit{}
+;
+
+translation-unit:
+  external-declaration{}
+  |translation-unit external-declaration{}
+;
+
+external-declaration:
+  function{/**Function definition*/}
+  |declaration-list{/** Global declaration*/}
+  |expression-list {/*Gloabal initiliazation*/}
+;
+
+
+function:
+  var-type ID LP  RP compound-statement{
+  	  /*ResetSymbolTable();*/
+	  backpatch($5.nextList,nextInstr);
+	  genCode("ret",0);
+  }
+;
+
+
+
+compound-statement:
+   LB statement-list RB{$$.nextList = $2.nextList;}
+;
+
+statement-list:
+  statement-list marker statement{
+    backpatch($1.nextList,$2.instr);
+    $$.nextList = $3.nextList;
+  }
+  |statement {$$.nextList = $1.nextList;}
+  |{/**Suffice for empty block statement*/
+       $$.nextList = NULL;
+  }
+;
+
+statement:
+  expression-list{
+    $$.nextList=NULL;
+  }
+  |declaration-list{
+    $$.nextList=NULL;
+  }
+  |compound-statement{
+    $$.nextList = $1.nextList;
+  }
+  |selection-statement{
+    $$.nextList = $1.nextList;
+  }
+  |iteration-statement{
+    $$.nextList = $1.nextList;
+  }
+  |jump-statement{
+    $$.nextList = NULL;
+  }
+;
+
+
+expression-list:
+  SEMICOLON { }
+  |expression SEMICOLON{}
+;
+
+
+declaration-list:
+  declaration{}
+  |declaration-list declaration{}
+;
+declaration:
+   var-type init-declarator-list SEMICOLON{}
+;
+var-type:
+  INT {type = 1;}
+  |SIGNED {type = 2;}
+  |SIGNED INT {type= 3;}
+  |UNSIGNED {type = 4;}
+  |UNSIGNED INT { type=5;}
+  |FLOAT {type=6;}
+  |SIGNED FLOAT{type=7; }
+  |UNSIGNED FLOAT{type=8; }
+  |BOOL { type=9;}
+;
+init-declarator-list:
+  ID {
+  	InsertId($1.addr,lineno,type);
+  }
+  |ID ASSIGN assignment-expression {
+  	InsertId($1.addr,lineno,type);
+  	genCode($1.addr,$3.addr);
+  }
+  |init-declarator-list COMMA ID {
+  	InsertId($3.addr,lineno,type);
+  }
+  |init-declarator-list COMMA ID ASSIGN assignment-expression {
+  	InsertId($3.addr,lineno,type);
+  	genCode($3.addr,$5.addr);
+  }
+;
+
+selection-statement:
+	if_prefix marker statement {
+	  backpatch($1.tlist,$2.instr);
+	  $$.nextList = mergeList($1.flist,$3.nextList);
+	}
+	|if_prefix marker statement ELSE Next statement {
+	    backpatch($1.tlist,$2.instr);
+	    backpatch($1.flist,$5.instr);
+	    YYSTYPE::BackpatchList *temp = mergeList($3.nextList,$5.nextList);
+	    $$.nextList = mergeList(temp,$6.nextList);
+	}
+	|SWITCH LP Next assignment-expression RP LB break-marker switch-statement RB Next{
+	  YYSTYPE::switchL *l=NULL;
+	  YYSTYPE::switchL *ll;
+	  int in=nextInstr;
+	  while($8!=NULL){
+	    if($8->stype == true){
+	      ll = $8;
+	      genCode("if",$4.addr," == ",$8->val,"goto",$8->instr);
+	      delete ll;
+	    }
+	    else{
+	       l = $8;
+	    }
+	    $8=$8->next;
+	  }
+	  if(l!=NULL){
+	    genCode("goto",l->instr);
+	    delete l;
+	  }
+	  backpatch($3.nextList,in); //Backpatch start of switch-statement
+	  backpatch($10.nextList,nextInstr);//Backpatch end of switch-statement
+	  backpatch(breaklist[break_current],nextInstr); //Backpatch break statement(s)
+	  break_current--;
+	}
+;
+
+if_prefix: IF LP assignment-expression RP {
+
+    if($3.flist  ==  NULL  && $3.tlist  ==  NULL ){
+      $$.tlist = makeList(nextInstr);
+      $$.flist = makeList(nextInstr+1);
+      genCode("if",$3.addr,"!=","0","goto",EMPTY);
+      genCode("goto",EMPTY);
+   }
+   else{
+     $$.tlist = $3.tlist;
+     $$.flist = $3.flist;
+   }
+}
+;
+
+
+
+
+switch-statement:
+  case-list{$$=$1;}
+  |case-list default-statement {
+  	$$ = mergeSwitchList($1,$2);
+  }
+  |default-statement case-list {
+  	$$ = mergeSwitchList($1,$2);
+  }
+  |case-list default-statement case-list{
+  	$$ = mergeSwitchList(mergeSwitchList($1,$2),$3);
+  }
+;
+default-statement:
+  DEFAULT COLON marker statement-list {
+    $$=makeList($3.instr,false,NULL,EMPTY);
+  }
+;
+case-list:
+  CASE Literals COLON  marker statement-list {
+    $$=makeList($4.instr,true,$2.addr,lineno);
+  }
+  |case-list CASE Literals COLON marker statement-list {
+    $$ = makeList($5.instr,true,$3.addr,lineno);
+    int line;
+    if( (line=IsDuplicateCaseLabel($1,$3.addr)) != -1 ){
+      AddError("duplicate case label",lineno,ERROR);
+      AddError("previously used here",line,ERROR);
+    }
+    $$ = mergeSwitchList($1,$$);
+  }
+;
+
+Next:{
+  $$.nextList = makeList(nextInstr);
+  genCode("goto",EMPTY);
+  $$.instr = nextInstr;
+}
+;
+
+
+iteration-statement:
+  WHILE continue-marker LP
+  assignment-expression {
+
+
+    if($4.tlist  ==  NULL  && $4.flist  ==  NULL ){
+      $4.tlist = makeList(nextInstr);
+      genCode("if",$4.addr,"!=","0","goto",EMPTY);
+      $4.flist = makeList(nextInstr);
+      genCode("goto",EMPTY);
+    }
+  }
+  RP marker break-marker  statement{
+    backpatch($9.nextList,$2.instr);
+    backpatch($4.tlist,$7.instr);
+    backpatch(continuelist[continue_current],$2.instr);
+    $$.nextList = $4.flist;
+    genCode("goto",$2.instr);
+    backpatch(breaklist[break_current],nextInstr);
+    break_current--;
+    continue_current--;
+}
+;
+
+break-marker:
+{
+  break_current++;
+  breaklist.push_back(NULL);
+}
+;
+continue-marker:
+{
+$$.instr = nextInstr;
+continue_current++;
+continuelist.push_back(NULL);
+}
+;
+
+
+
+jump-statement:
+   BREAK SEMICOLON {
+    if(break_current!=EMPTY){
+      genCode("goto",EMPTY);
+      if( (breaklist.size() == 0) || ( (signed)breaklist.size() == break_current-1) )
+        breaklist.push_back(makeList(nextInstr-1));
+      else
+        breaklist[break_current]=mergeList(makeList(nextInstr-1),breaklist[break_current]);
+    }
+    else{
+      AddError("break is not in loop or switch statement",lineno,ERROR);
+    }
+  }
+  |CONTINUE SEMICOLON{
+    if(continue_current!=-1){
+      genCode("goto",EMPTY);
+      if( (continuelist.size() == 0) || ( (signed)continuelist.size() == continue_current-1) )
+        continuelist.push_back(makeList(nextInstr-1));
+      else
+        continuelist[continue_current]=mergeList(makeList(nextInstr-1),continuelist[continue_current]);
+    }
+    else{
+      AddError("continue is not in loop statement",lineno,ERROR);
+    }
+  }
+;
+
+
+expression:
+  assignment-expression{
+  }
+  |expression COMMA assignment-expression{
+  }
+;
+
+
+assignment-expression:
+  logical-OR-expression{
+      $$.addr  = $1.addr;
+      $$.type  = $1.type;
+      $$.tlist = $1.tlist;
+      $$.flist = $1.flist;
+  }
+  |assignment-expression ASSIGN assignment-expression {
+
+
+        if($1.addr[0] == '_' && $1.addr[1] == '_'){
+          AddError((char*)"lvalue required as left operand of assignment",lineno,ERROR);
+        }
+        genCode($1.addr,$3.addr);
+        $$.flist = NULL;
+        $$.tlist = NULL;
+  }
+  |assignment-expression PLUSEQ assignment-expression {
+
+
+        if($1.addr[0] == '_' && $1.addr[1] == '_'){
+          AddError((char*)"lvalue required as left operand of assignment",lineno,ERROR);
+        }
+        $$.flist = NULL;
+        $$.tlist = NULL;
+        $$.addr  = newTemp();
+        genCode($$.addr  ,$1.addr,"+",$3.addr);
+        genCode($1.addr,$$.addr );
+        $$.addr  = $1.addr;
+  }
+  |assignment-expression MINUSEQ assignment-expression {
+       $$.flist = NULL;
+       $$.tlist = NULL;
+
+
+        if($1.addr[0] == '_' && $1.addr[1] == '_'){
+          AddError((char*)"lvalue required as left operand of assignment",lineno,ERROR);
+        }
+        $$.addr  = newTemp();
+        genCode($$.addr  ,$1.addr,"-",$3.addr);
+        genCode($1.addr,$$.addr );
+        $$.addr  = $1.addr;
+  }
+  |assignment-expression TIMESEQ assignment-expression {
+       $$.flist = NULL;
+       $$.tlist = NULL;
+
+
+        if($1.addr[0] == '_' && $1.addr[1] == '_'){
+          AddError((char*)"lvalue required as left operand of assignment",lineno,ERROR);
+        }
+        $$.addr  = newTemp();
+        genCode($$.addr  ,$1.addr,"*",$3.addr);
+        genCode($1.addr,$$.addr );
+        $$.addr  = $1.addr;
+  }
+  |assignment-expression DIVIDEQ assignment-expression {
+       $$.flist = NULL;
+       $$.tlist = NULL;
+
+
+        if($1.addr[0] == '_' && $1.addr[1] == '_'){
+          AddError((char*)"lvalue required as left operand of assignment",lineno,ERROR);
+        }
+        $$.addr  = newTemp();
+        genCode($$.addr  ,$1.addr,"/",$3.addr);
+        genCode($1.addr,$$.addr );
+        $$.addr  = $1.addr;
+  }
+;
+
+logical-OR-expression:
+  logical-AND-expression{
+      $$.addr  = $1.addr;
+      $$.type  = $1.type;
+      $$.flist = $1.flist;
+      $$.tlist = $1.tlist;
+  }
+  |logical-OR-expression {
+	    if($1.tlist  ==  NULL  && $1.flist   ==  NULL ){
+	        genCode("if",$1.addr,"!=","0","goto",EMPTY);
+	            genCode("goto",EMPTY);
+	            $1.tlist = makeList(nextInstr-2);
+	            $1.flist = makeList(nextInstr-1);
+	    }
+    }OR marker logical-AND-expression{
+      if($5.tlist  ==  NULL  && $5.flist   ==  NULL ){
+        genCode("if",$5.addr,"!=","0","goto",EMPTY);
+            genCode("goto",EMPTY);
+            $5.tlist = makeList(nextInstr-2);
+            $5.flist = makeList(nextInstr-1);
+      }
+      backpatch($1.flist,$4.instr);
+      $$.flist = $5.flist;
+      $$.tlist = mergeList($1.tlist,$5.tlist);
+  }
+;
+
+logical-AND-expression:
+  inclusive-OR-expression{
+      $$.addr  = $1.addr;
+      $$.type  = $1.type;
+      $$.flist = $1.flist;
+      $$.tlist = $1.tlist;
+  }
+  |logical-AND-expression {
+        if($1.tlist  ==  NULL  && $1.flist   ==  NULL ){
+            genCode("if",$1.addr,"!=","0","goto",EMPTY);
+            genCode("goto",EMPTY);
+            $1.tlist = makeList(nextInstr-2);
+            $1.flist = makeList(nextInstr-1);
+    	}
+
+    } AND marker inclusive-OR-expression{
+      if($5.tlist  ==  NULL  && $5.flist   ==  NULL ){
+            genCode("if",$5.addr,"!=","0","goto",EMPTY);
+            genCode("goto",EMPTY);
+            $5.tlist = makeList(nextInstr-2);
+            $5.flist = makeList(nextInstr-1);
+      }
+      backpatch($1.tlist,$4.instr);
+      $$.tlist = $5.tlist;
+      $$.flist = mergeList($1.flist,$5.flist);
+  }
+;
+
+inclusive-OR-expression:
+  exclusive-OR-expression{
+      $$.addr  = $1.addr;
+      $$.type  = $1.type;
+      $$.type  = $1.type;
+      $$.flist = $1.flist;
+      $$.tlist = $1.tlist;
+  }
+  |inclusive-OR-expression IOR exclusive-OR-expression{
+      $$.addr  = newTemp();
+      $$.type  = $1.type;
+      $$.flist = NULL;
+      $$.tlist = NULL;
+      genCode($$.addr ,$1.addr,"|",$3.addr);
+  }
+;
+
+
+exclusive-OR-expression:
+inclusive-AND-expression{
+    $$.addr  = $1.addr;
+    $$.type  = $1.type;
+    $$.flist = $1.flist;
+    $$.tlist = $1.tlist;
+}
+|exclusive-OR-expression XOR inclusive-AND-expression{
+    $$.addr  = newTemp();
+    $$.flist = NULL;
+    $$.tlist = NULL;
+    genCode($$.addr ,$1.addr,"XOR",$3.addr);
+}
+;
+
+
+inclusive-AND-expression:
+  equality-expression{
+    $$.addr  = $1.addr;
+    $$.type  = $1.type;
+    $$.flist = $1.flist;
+    $$.tlist = $1.tlist;
+  }
+  | inclusive-AND-expression IAND equality-expression{
+      $$.addr  = newTemp();
+      $$.flist = NULL;
+      $$.tlist = NULL;
+      genCode($$.addr ,$1.addr,"&",$3.addr);
+  }
+;
+
+
+equality-expression:
+  relational-expression{
+      $$.addr   = $1.addr;
+      $$.type   = $1.type;
+      $$.tlist  = $1.tlist;
+      $$.flist  = $1.flist;
+  }
+  |equality-expression EQ relational-expression{
+      $$.tlist = makeList(nextInstr);
+      $$.flist = makeList(nextInstr+1);
+      genCode("if",$1.addr," == ",$3.addr,"goto",EMPTY);
+      genCode("goto",EMPTY);
+  }
+  |equality-expression NEQ relational-expression{
+      $$.tlist = makeList(nextInstr);
+      $$.flist = makeList(nextInstr+1);
+      genCode("if",$1.addr,"!=",$3.addr,"goto",EMPTY);
+      genCode("goto",EMPTY);
+  }
+;
+
+relational-expression:
+  additive-expression{
+    $$.addr   = $1.addr;
+    $$.type   = $1.type;
+    $$.tlist  = $1.tlist;
+    $$.flist  = $1.flist;
+  }
+  |relational-expression RELOP  additive-expression{
+      $$.tlist = makeList(nextInstr);
+      $$.flist = makeList(nextInstr+1);
+      genCode("if",$1.addr,$2,$3.addr,"goto",EMPTY);
+      genCode("goto",EMPTY);
+  }
+;
+
+
+
+RELOP:
+     GT  {$$=(char*)">";}
+   | GEQ {$$ =(char*)">=";}
+   | LT  {$$ =(char*)"<";}
+   | LEQ {$$ =(char*)"<=";}
+;
+
+additive-expression:
+  multiplicative-expression{
+      $$.addr   = $1.addr;
+      $$.type   = $1.type;
+      $$.tlist  = $1.tlist;
+      $$.flist  = $1.flist;
+  }
+  |additive-expression PLUS multiplicative-expression{
+      $$.addr   = newTemp();
+      $$.type   = $1.type;
+      $$.tlist  = NULL;
+      $$.flist  = NULL;
+      genCode($$.addr  ,$1.addr,"+",$3.addr);
+  }
+  |additive-expression MINUS multiplicative-expression{
+      $$.addr   = newTemp();
+      $$.type   = $1.type;
+      $$.tlist  = NULL;
+      $$.flist  = NULL;
+      genCode($$.addr  ,$1.addr,"-",$3.addr);
+  }
+  ;
+
+  multiplicative-expression:
+    exponentiation-expression{
+      $$.addr   = $1.addr;
+      $$.type   = $1.type;
+      $$.tlist  = $1.tlist;
+      $$.flist  = $1.flist;
+  }
+  | multiplicative-expression TIMES exponentiation-expression{
+      $$.addr   = newTemp();
+      $$.type   = $1.type;
+      $$.tlist  = NULL;
+      $$.flist  = NULL;
+      genCode($$.addr  ,$1.addr,"*",$3.addr);
+  }
+  | multiplicative-expression DIVIDE exponentiation-expression{
+      $$.addr   = newTemp();
+      $$.type   = $1.type;
+      $$.tlist  = NULL;
+      $$.flist  = NULL;
+      genCode($$.addr  ,$1.addr,"/",$3.addr);
+  }
+;
+
+exponentiation-expression :
+  unary-expression {
+    $$.addr   = $1.addr;
+    $$.type   = $1.type;
+    $$.flist  = $1.flist;
+    $$.tlist  = $1.tlist;
+  }
+  | unary-expression EXP exponentiation-expression{
+    $$.addr   = newTemp();
+    $$.type   = $1.type;
+    $$.tlist  = NULL;
+    $$.flist  = NULL;
+    genCode($$.addr  ,$1.addr,"@",$3.addr);
+  }
+
+;
+
+unary-expression:
+  postfix-expression{
+    $$.addr   = $1.addr;
+    $$.tlist  = $1.tlist;
+    $$.flist  = $1.flist;
+  }
+  |PLUSPLUS unary-expression{
+     $$.addr   = newTemp();
+     $$.tlist  = $2.tlist;
+     $$.flist  = $2.flist;
+     genCode($$.addr ,$2.addr,"+","1");
+     genCode($2.addr,$$.addr );
+  }
+  |MINUSMINUS unary-expression{
+     $$.addr   = newTemp();
+     $$.tlist  = $2.tlist;
+     $$.flist  = $2.flist;
+     genCode($$.addr ,$2.addr,"-","1");
+     genCode($2.addr,$$.addr );
+  }
+  |PLUS unary-expression{
+      $$.addr   = $2.addr;
+      $$.tlist  = $2.tlist;
+      $$.flist  = $2.flist;
+    }
+  |MINUS unary-expression{
+      $$.addr   = newTemp();
+      $$.tlist  = $2.tlist;
+      $$.flist  = $2.flist;
+      genCode($$.addr ,"-1","*",$2.addr);
+  }
+  |INOT  unary-expression{
+      $$.addr   = newTemp();
+      $$.tlist  = $2.tlist;
+      $$.flist  = $2.flist;
+      genCode($$.addr ,"~",$2.addr);
+  }
+  |NOT unary-expression{
+      if($2.tlist  ==  NULL  && $2.flist   ==  NULL ){
+        genCode("if",$2.addr,"!=","0","goto",EMPTY);
+            genCode("goto",EMPTY);
+            $2.tlist = makeList(nextInstr-2);
+            $2.flist = makeList(nextInstr-1);
+    }
+      $$.addr   = newTemp();
+      $$.tlist  = $2.flist;
+      $$.flist  = $2.tlist;
+  }
+;
+
+postfix-expression:
+  primary-expression{
+    $$.addr   = $1.addr;
+    $$.tlist  = $1.tlist;
+    $$.flist  = $1.flist;
+  }
+  |postfix-expression PLUSPLUS{
+    $$.addr   = newTemp();
+    $$.tlist  = $1.tlist;
+    $$.flist  = $1.flist;
+    genCode($$.addr ,$1.addr);
+    genCode($1.addr,$$.addr ,"+","1");
+  }
+  |postfix-expression MINUSMINUS{
+    $$.addr   = newTemp();
+    $$.tlist  = $1.tlist;
+    $$.flist  = $1.flist;
+    genCode($$.addr ,$1.addr);
+    genCode($1.addr,$$.addr ,"-","1");
+  }
+;
+
+primary-expression:
+ ID{
+  $$.addr   = $1.addr;
+  $$.tlist  = NULL;
+  $$.flist  = NULL;
+  if(!IsPresent($1.addr)){
+    char *errmsg =  new char[256];
+    strcpy(errmsg,"'");
+    strcat(errmsg,$$.addr);
+    strcat(errmsg,"' was not declared");
+    AddError(errmsg,lineno,ERROR);
+    delete errmsg;
+  }
+
+ }
+  |Literals{
+    $$.addr   = $1.addr;
+    $$.tlist  = $1.tlist;
+    $$.flist  = $1.flist;
+  }
+  |LP assignment-expression RP{
+    $$.addr  = $2.addr;
+    $$.flist  = $2.flist;
+    $$.tlist  = $2.tlist;
+  }
+;
+
+
+Literals:
+  INTNUM {
+    /**
+      This temp contains value of the const
+      e.g. 5
+      temp->5
+    */
+    $$.type  = INTNUM;
+    $$.flist = NULL;
+    $$.tlist = NULL;
+  }
+  | DOUBLENUM {
+    $$.type  = DOUBLENUM;
+    $$.flist = NULL;
+    $$.tlist = NULL;
+  }
+  | TRUE {
+    $$.addr = new char[2];
+    $$.addr = (char*)"1";
+    $$.type = BOOL;
+    if(!assign){
+    	 $$.tlist = makeList(nextInstr);
+	     $$.flist = NULL;
+	     genCode("goto",EMPTY);
+    }
+    else{
+		assign = false;
+	}
+  }
+  | FALSE {
+    $$.addr = new char[2];
+    $$.addr = (char*)"0";
+    $$.type   = BOOL;
+    if(!assign){
+	    $$.flist = makeList(nextInstr);
+	    $$.tlist = NULL;
+	    genCode("goto",EMPTY);
+	}
+	else{
+		assign = false;
+	}
+  }
+;
+
+marker:
+{$$.instr = nextInstr;}
+;
+%%
+
+void yyerror(const char *s){
+  AddError((char*)" ... is missing",lineno,ERROR);
+}
+
+int main(int argc,char *argv[ ]){
+
+  FILE* fp=NULL;
+  if(argc<2){
+    fprintf(stderr,"No input file\n");
+    return 0;
+  }
+  if(argc == 2){
+    fp=fopen(argv[1],"r");
+  }
+  if(fp==NULL){
+        fprintf(stderr, "Error opening file: %s\n", strerror(errno));
+        return 0;
+  }
+  yyin=fp;
+  InitializeSymbolTable();
+  Error = NULL;
+
+  while(!feof(yyin)){
+    yyparse();
+  }
+  fclose(fp);
+
+  DeleteSymbolTable();
+
+  if(Error  ==  NULL ) printCode();
+  else{
+    printError();
+  }
+  return 0;
+}

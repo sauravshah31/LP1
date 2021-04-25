@@ -1,0 +1,302 @@
+/*
+Running
+lex GENERATOR.l
+gcc convertor.c
+./a.out
+
+*/
+
+
+
+
+//TOKENS.h
+#define MOV 1
+#define ADD 2
+#define SUB 3
+
+#define OPERAND 4
+#define REG 5
+
+
+
+
+
+//GENRATOR.l
+%{
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <string.h>
+
+    #include "tokens.h"
+    
+    char output[100];
+    
+    void dec_bin(char *inp);
+    void hex_bin(char *inp);
+    void oct_bin(char *inp);
+%}
+DEC_NUM         [0-9]+D
+BIN_NUM         [0-1]+B
+HEX_NUM         [0-9A-F]+H
+OCT_NUM         [0-7]+O
+REGISTER        [A-Z]
+%%
+MOV         return MOV;
+ADD         return ADD;
+SUB         return SUB;
+{DEC_NUM}   {yytext[strlen(yytext)-1] = '\0';dec_bin(yytext); yytext = output; return OPERAND;}
+{BIN_NUM}   {yytext[strlen(yytext)-1] = '\0'; return OPERAND;}
+{HEX_NUM}   {yytext[strlen(yytext)-1] = '\0';hex_bin(yytext); yytext = output; return OPERAND;}
+{OCT_NUM}   {yytext[strlen(yytext)-1] = '\0';oct_bin(yytext); yytext = output; return OPERAND;}
+{REGISTER}  {return REG;}
+,           ;
+\n          ;
+[ \t]+      ;
+%%
+
+void dec_bin(char *inp){
+    int num = atoi(inp), r,i=0;
+    while(num){
+        r = num % 2;
+        num /= 2;
+        if(r){
+            output[i++] = '1';
+        }else{
+            output[i++] = '0';
+        }
+    }
+    output[i] = '\0';
+    i -= 1;
+    int j = i;
+    i = 0;
+    while(i<j){
+        char c = output[i];
+        output[i] = output[j];
+        output[j] = c;
+        i++;
+        j--;
+    }
+}
+
+void hex_bin(char *inp){
+    int i=0, num, j=0;
+    while(inp[j] != '\0'){
+        num = (inp[j]>='A'&&inp[j]<='E')?inp[j]-'A'+10:inp[j]-'0';
+        if(num & 1<<3)
+            output[i++] = '1';
+        else
+            output[i++] = '0';
+        
+        if(num & 1<<2)
+            output[i++] = '1';
+        else
+            output[i++] = '0';
+
+        if(num & 1<<1)
+            output[i++] = '1';
+        else
+            output[i++] = '0';
+
+        if(num & 1<<0)
+            output[i++] = '1';
+        else
+            output[i++] = '0';
+        j++;
+    }
+    output[i] = '\0';
+}
+
+void oct_bin(char *inp){
+    int i=0, num,j=0;
+    while(inp[j] != '\0'){
+        num = inp[j]-'0';
+        
+        if(num & 1<<2)
+            output[i++] = '1';
+        else
+            output[i++] = '0';
+
+        if(num & 1<<1)
+            output[i++] = '1';
+        else
+            output[i++] = '0';
+
+        if(num & 1<<0)
+            output[i++] = '1';
+        else
+            output[i++] = '0';
+        j++;
+    }
+    output[i] = '\0';
+}
+
+int yywrap(){
+    return 1;
+}
+
+
+
+
+//CONVERTER.c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "tokens.h"
+
+extern int yylex();
+extern char* yytext;
+
+char output[100];
+int _i;
+
+void add(char *a, char *b){
+    output[99] = '\0';
+    _i = 98;
+    int i = strlen(a)-1;
+    int j = strlen(b)-1;
+    int c=0;
+    while (i>=0 && j>=0)
+    {
+        int s = (a[i]-'0') + (b[j]-'0') + c;
+        c = 0;
+        if(s == 2){
+            s = 0;
+            c = 1;
+        }else if(s==3){
+            s = 1;
+            c = 1;
+        }
+        output[_i--] = s+'0';
+        i--;j--;
+    }
+
+    while (i>=0)
+    {
+        int s = (a[i]-'0') + c;
+        c = 0;
+        if(s == 2){
+            s = 0;
+            c = 1;
+        }else if(s==3){
+            s = 1;
+            c = 1;
+        }
+        output[_i--] = s+'0';
+        i--;
+    }
+    while (j>=0)
+    {
+        int s = (b[j]-'0') + c;
+        c = 0;
+        if(s == 2){
+            s = 0;
+            c = 1;
+        }else if(s==3){
+            s = 1;
+            c = 1;
+        }
+        output[_i--] = s+'0';
+        j--;
+    }
+    if(c){
+        output[_i--] = '1';
+    }
+    _i += 1;
+}
+
+void sub(char *a, char *b){
+    char *tmp = malloc(100);
+    int i=0;
+    while(b[i]!='\0'){
+        tmp[i] = (b[i]=='0'?'1':'0');
+        i+=1;
+    }
+    add(tmp,"1");
+    strcpy(tmp,output+_i);
+    add(a,tmp);
+    free(tmp);
+    if((99-_i) >strlen(tmp))
+        _i += 1;
+    while(output[_i] == '0')
+        _i += 1;
+}
+
+
+
+int main(){
+    char* registers[26];
+    for(int i=0;i<26;i++){
+        registers[i] = (char *)malloc(100);
+    }
+
+    int tok;
+    while((tok=yylex())){
+        if(tok == MOV){
+            tok = yylex();
+            if(tok!=REG){
+                fprintf(stderr,"error\n");
+                return -1;
+            }
+            int r = yytext[0]-'A';
+            tok = yylex();
+            
+            if(tok == REG){
+                strcpy(registers[r],registers[yytext[0]-'A']);
+            }else if(tok == OPERAND){
+                strcpy(registers[r],yytext);
+            }else{
+                fprintf(stderr,"error\n");
+                return -1;
+            }
+
+            printf("1101 %s\n",registers[r]);
+
+        }else if(tok == ADD){
+            tok = yylex();
+            if(tok!=REG){
+                fprintf(stderr,"error\n");
+                return -1;
+            }
+            int r = yytext[0]-'A';
+            tok = yylex();
+            if(tok == REG){
+                add(registers[r], registers[yytext[0]-'A']);
+                printf("0100 %s\n",registers[yytext[0]-'A']);
+            }else if(tok == OPERAND){
+                add(registers[r], yytext);
+                printf("0100 %s\n",yytext);
+            }else{
+                fprintf(stderr,"error\n");
+                return -1;
+            }
+            strcpy(registers[r],output+_i);
+
+            
+        }else if(tok == SUB){
+            tok = yylex();
+            if(tok!=REG){
+                fprintf(stderr,"error\n");
+                return -1;
+            }
+            int r = yytext[0]-'A';
+            tok = yylex();
+            if(tok == REG){
+                sub(registers[r], registers[yytext[0]-'A']);
+                printf("0011 %s\n",registers[yytext[0]-'A']);
+            }else if(tok == OPERAND){
+                sub(registers[r], yytext);
+                printf("0011 %s\n",yytext);
+            }else{
+                fprintf(stderr,"error\n");
+                return -1;
+            }
+            strcpy(registers[r],output+_i);
+
+        }else{
+            fprintf(stderr,"error\n");
+            return -1;
+        }
+    }
+    return 0;
+}

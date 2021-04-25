@@ -1,0 +1,3 @@
+let var=5
+if var < 6 then res=2+3*7
+display res
